@@ -482,14 +482,14 @@ def recorrer_sitio(cfg, rep: Reporte) -> dict:
     pendientes = [sitio + "/"] + [urljoin(sitio + "/", p.lstrip("/")) for p in cfg.get("paginas_extra", [])]
     visitadas, externos, textos, enlaces_tel = set(), defaultdict(set), {}, []
     excluidas = [r.lower() for r in cfg.get("rutas_excluidas", ["/api/"])]
+    sin_destino = set()
 
     with sync_playwright() as p:
         demo = bool(cfg.get("_demo"))
         nav = p.chromium.launch(headless=(not demo) or os.getenv("DEMO_SIN_VENTANA") == "1",
                                 slow_mo=120 if demo else 0)
         # La identificación permite filtrar las visitas del agente en las métricas de PettGo
-        ctx = nav.new_context(user_agent=UA + " Chrome", viewport={"width": 1366, "height": 850},
-                              extra_http_headers={"X-PettGo-Agente": "calidad"})
+        ctx = nav.new_context(user_agent=UA + " Chrome", viewport={"width": 1366, "height": 850})
         pagina = ctx.new_page()
         errores_consola, recursos_fallidos = [], []
         pagina.on("console", lambda m: errores_consola.append(m.text) if m.type == "error" else None)
@@ -552,7 +552,10 @@ def recorrer_sitio(cfg, rep: Reporte) -> dict:
             for a in info["enlaces"]:
                 href, absu = (a["href"] or "").strip(), a["abs"]
                 if href in ("", "#") or href.lower().startswith("javascript"):
-                    rep.agregar("menor", "Sitio web", url, a["txt"] or "(sin texto)", "Enlace o botón sin destino", f"href='{href}'", url)
+                    clave = (a["txt"] or "(sin texto)", href)
+                    if clave not in sin_destino:  # el mismo botón del menú o pie de página se reporta una vez
+                        sin_destino.add(clave)
+                        rep.agregar("menor", "Sitio web", url, clave[0], "Enlace o botón sin destino", f"href='{href}'", url)
                 elif href.startswith("tel:"):
                     enlaces_tel.append((url, a["txt"], href))
                     if err := validar_telefono(href[4:]):
@@ -766,7 +769,7 @@ def main():
     rep = Reporte()
 
     datos_bd = {}
-    sb_url, sb_key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")
+    sb_url, sb_key = (os.getenv("SUPABASE_URL") or "").strip(), (os.getenv("SUPABASE_KEY") or "").strip()
     if sb_url and sb_key:
         datos_bd = revisar_bd(cfg, rep, Supabase(sb_url, sb_key))
     else:
