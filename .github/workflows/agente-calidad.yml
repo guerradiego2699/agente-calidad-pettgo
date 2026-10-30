@@ -2,10 +2,13 @@ name: Agente de control de calidad PettGo
 
 on:
   schedule:
-    # Todos los días a las 10:00 UTC = 07:00 en Chile (horario de verano, UTC-3).
-    # En horario de invierno (UTC-4) corre a las 06:00. GitHub solo acepta UTC.
-    - cron: "0 10 * * *"
+    # Los días 1 y 15 de cada mes a las 13:00 UTC = 10:00 en Chile (horario de verano, UTC-3).
+    # En horario de invierno (UTC-4) corre a las 09:00. GitHub solo acepta horas en UTC.
+    - cron: "0 13 1,15 * *"
   workflow_dispatch: {}   # botón "Run workflow" para ejecutarlo a mano
+
+permissions:
+  contents: write   # para guardar el último reporte en el repositorio
 
 jobs:
   revisar:
@@ -24,14 +27,8 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
-      # Recupera el reporte de ayer para marcar los hallazgos nuevos
-      - name: Recuperar reporte anterior
-        uses: actions/cache/restore@v4
-        with:
-          path: reportes/ultimo.json
-          key: reporte-${{ github.run_id }}
-          restore-keys: reporte-
-
+      # El reporte anterior (reportes/ultimo.json) viene en el repositorio y sirve
+      # para marcar qué hallazgos son nuevos respecto de la revisión anterior.
       - name: Ejecutar agente
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -42,13 +39,15 @@ jobs:
           CORREO_DESTINO: ${{ secrets.CORREO_DESTINO }}         # opcional
         run: python agente_calidad.py
 
-      - name: Guardar reporte de hoy (para comparar mañana)
+      - name: Guardar el reporte en el repositorio (para comparar la próxima vez)
         if: always()
         continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: reportes/ultimo.json
-          key: reporte-${{ github.run_id }}
+        run: |
+          git config user.name "agente-calidad-pettgo"
+          git config user.email "agente-calidad-pettgo@users.noreply.github.com"
+          git add -f reportes/ultimo.json reportes/reporte.html reportes/resumen.md
+          git commit -m "Reporte de calidad $(date +%Y-%m-%d)" || echo "Sin cambios"
+          git push
 
       - name: Publicar reporte descargable
         if: always()
