@@ -1,0 +1,59 @@
+name: Agente de control de calidad PettGo
+
+on:
+  schedule:
+    # Todos los días a las 10:00 UTC = 07:00 en Chile (horario de verano, UTC-3).
+    # En horario de invierno (UTC-4) corre a las 06:00. GitHub solo acepta UTC.
+    - cron: "0 10 * * *"
+  workflow_dispatch: {}   # botón "Run workflow" para ejecutarlo a mano
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # Recupera el reporte de ayer para marcar los hallazgos nuevos
+      - name: Recuperar reporte anterior
+        uses: actions/cache/restore@v4
+        with:
+          path: reportes/ultimo.json
+          key: reporte-${{ github.run_id }}
+          restore-keys: reporte-
+
+      - name: Ejecutar agente
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # opcional
+          SMTP_USUARIO: ${{ secrets.SMTP_USUARIO }}             # opcional
+          SMTP_CLAVE: ${{ secrets.SMTP_CLAVE }}                 # opcional
+          CORREO_DESTINO: ${{ secrets.CORREO_DESTINO }}         # opcional
+        run: python agente_calidad.py
+
+      - name: Guardar reporte de hoy (para comparar mañana)
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: reportes/ultimo.json
+          key: reporte-${{ github.run_id }}
+
+      - name: Publicar reporte descargable
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-calidad-${{ github.run_number }}
+          path: reportes/
+          retention-days: 90
