@@ -33,6 +33,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}   # Fase 2: guardar reportes en pettgo.cl
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # opcional
           SMTP_USUARIO: ${{ secrets.SMTP_USUARIO }}             # opcional
           SMTP_CLAVE: ${{ secrets.SMTP_CLAVE }}                 # opcional
