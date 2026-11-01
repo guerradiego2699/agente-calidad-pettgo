@@ -718,6 +718,35 @@ th{{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut
     return ruta
 
 
+def guardar_en_supabase(cfg, rep: Reporte, resumen: str):
+    """Fase 2: guarda el reporte en la tabla reportes_calidad para verlo en pettgo.cl/admin/calidad.
+    Necesita la llave SECRETA de Supabase (SUPABASE_SECRET_KEY); sin ella, se omite."""
+    url = (os.getenv("SUPABASE_URL") or "").strip()
+    llave = (os.getenv("SUPABASE_SECRET_KEY") or "").strip()
+    if not (url and llave):
+        print("[Supabase] Sin SUPABASE_SECRET_KEY: el reporte no se guarda en pettgo.cl (solo en GitHub/archivo).")
+        return
+    c = rep.conteo()
+    fila = {
+        "origen": "automatico" if os.getenv("GITHUB_ACTIONS") else "manual",
+        "sitio": cfg["sitio"],
+        "criticos": c["critico"], "advertencias": c["advertencia"], "menores": c["menor"],
+        "metricas": dict(rep.metricas),
+        "resumen_ia": resumen or None,
+        "hallazgos": rep.hallazgos,
+    }
+    h = {"apikey": llave, "Content-Type": "application/json", "Prefer": "return=minimal", "User-Agent": UA}
+    if llave.startswith("eyJ"):  # llave service_role antigua (JWT)
+        h["Authorization"] = f"Bearer {llave}"
+    try:
+        r = requests.post(url.rstrip("/") + "/rest/v1/" + cfg.get("tabla_reportes", "reportes_calidad"),
+                          headers=h, data=json.dumps(fila, ensure_ascii=False, default=str).encode("utf-8"), timeout=30)
+        r.raise_for_status()
+        print("[Supabase] Reporte guardado en la tabla reportes_calidad (visible en pettgo.cl/admin/calidad).")
+    except Exception as e:  # noqa: BLE001 — si falla, el resto del reporte igual queda en GitHub
+        print(f"[Supabase] No se pudo guardar el reporte: {e}")
+
+
 def enviar_correo(cfg, rep: Reporte, ruta_html: Path):
     usuario, clave, destino = os.getenv("SMTP_USUARIO"), os.getenv("SMTP_CLAVE"), os.getenv("CORREO_DESTINO")
     if not (usuario and clave and destino):
@@ -809,6 +838,7 @@ def main():
     ruta = generar_reporte(cfg, rep, carpeta, hay_previo, resumen)
     c = rep.conteo()
     print(f"\nListo: {c['critico']} críticos, {c['advertencia']} advertencias, {c['menor']} menores → {ruta}")
+    guardar_en_supabase(cfg, rep, resumen)
 
     try:
         enviar_correo(cfg, rep, ruta)
