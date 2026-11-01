@@ -1,5 +1,5 @@
 {
-  "fecha": "2026-10-30T11:33:11.551355-03:00",
+  "fecha": "2026-11-01T10:37:10.467887-03:00",
   "sitio": "https://www.pettgo.cl",
   "conteo": {
     "critico": 1,
@@ -21,7 +21,7 @@
       "problema": "Campo vacío: imagen_url",
       "detalle": "",
       "url": "",
-      "nuevo": true
+      "nuevo": false
     },
     {
       "severidad": "advertencia",
@@ -31,7 +31,7 @@
       "problema": "Valor no permitido en categoria",
       "detalle": "'alimento' no corresponde a la oferta definida por el equipo",
       "url": "",
-      "nuevo": true
+      "nuevo": false
     },
     {
       "severidad": "advertencia",
@@ -41,7 +41,7 @@
       "problema": "Ubicación fuera de la zona de Curicó",
       "detalle": "lat=-34.9692115672529, lng=-7123347968590710.0",
       "url": "",
-      "nuevo": true
+      "nuevo": false
     },
     {
       "severidad": "menor",
@@ -51,7 +51,7 @@
       "problema": "Campo vacío: photos",
       "detalle": "",
       "url": "",
-      "nuevo": true
+      "nuevo": false
     },
     {
       "severidad": "menor",
