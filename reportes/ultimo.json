@@ -1,8 +1,8 @@
 {
-  "fecha": "2026-11-02T23:58:29.090565-03:00",
+  "fecha": "2026-11-03T00:05:32.477730-03:00",
   "sitio": "https://www.pettgo.cl",
   "conteo": {
-    "critico": 1,
+    "critico": 3,
     "advertencia": 2,
     "menor": 6
   },
@@ -22,6 +22,26 @@
       "detalle": "",
       "url": "",
       "nuevo": false
+    },
+    {
+      "severidad": "critico",
+      "origen": "Sitio web",
+      "entidad": "https://www.pettgo.cl/productos/a2b8dce7-e522-4793-9319-a30993ae2ae3",
+      "registro": "champu para gatos (id a2b8dce7-e522-4793-9319-a30993ae2ae3)",
+      "problema": "'Ver en la tienda' lleva a un sitio que no es una tienda",
+      "detalle": "Lleva a https://www.google.com/?hl=es&utm_source=pettgo&utm_medium=referral&utm_campaign=productos",
+      "url": "https://www.google.com/?hl=es&utm_source=pettgo&utm_medium=referral&utm_campaign=productos",
+      "nuevo": true
+    },
+    {
+      "severidad": "critico",
+      "origen": "Sitio web",
+      "entidad": "https://www.pettgo.cl/productos/afc17fd8-6ba2-4a49-bf39-f01c2ea7b4e7",
+      "registro": "Blabla (id afc17fd8-6ba2-4a49-bf39-f01c2ea7b4e7)",
+      "problema": "'Ver en la tienda' lleva a un sitio que no es una tienda",
+      "detalle": "Lleva a https://www.netflix.com/browse?utm_source=pettgo&utm_medium=referral&utm_campaign=productos",
+      "url": "https://www.netflix.com/browse?utm_source=pettgo&utm_medium=referral&utm_campaign=productos",
+      "nuevo": true
     },
     {
       "severidad": "advertencia",
