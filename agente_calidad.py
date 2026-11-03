@@ -367,6 +367,56 @@ def _revisar_url(url: str) -> dict:
     return res
 
 
+PALABRAS_MASCOTAS = ("mascota", "perro", "gato", "cachorro", "felino", "canino", "veterinari", "collar", "correa",
+                     "arnes", "arena sanitaria", "rascador", "comedero", "bebedero", "juguete", "accesorio",
+                     "pet", "pets", "dog", "cat", "puppy", "kitten")
+DOMINIOS_NO_TIENDA = ("netflix.com", "youtube.com", "youtu.be", "spotify.com", "disneyplus.com", "primevideo.com",
+                      "max.com", "hbomax.com", "twitch.tv", "google.com", "wikipedia.org", "example.com")
+
+
+def revisar_tiendas(cfg, rep: Reporte, tiendas: dict, datos_bd: dict):
+    """Revisa a dónde lleva cada botón 'Ver en la tienda' (/api/ir/<id>) y si el destino parece
+    una tienda de mascotas. Sigue solo la primera redirección; el agente se identifica como
+    PettGo-AgenteCalidad para que esas visitas se puedan excluir de las métricas de clics."""
+    nombres = {}
+    for tabla, (filas, mapa, _) in datos_bd.items():
+        for f in filas:
+            for c in mapa.get("id", []):
+                nombres[str(f.get(c))] = etiqueta_registro(f, mapa)
+    for enlace, paginas in sorted(tiendas.items()):
+        ident = urlparse(enlace).path.rstrip("/").split("/")[-1]
+        producto = nombres.get(ident, f"producto {ident}")
+        pagina = sorted(paginas)[0]
+        try:
+            r = requests.get(enlace, headers={"User-Agent": UA}, timeout=20, allow_redirects=False)
+            destino = urljoin(enlace, r.headers.get("Location", "")) if r.is_redirect or r.status_code in (301, 302, 303, 307, 308) else ""
+        except requests.exceptions.RequestException as e:
+            rep.agregar("critico", "Sitio web", pagina, producto, "El botón 'Ver en la tienda' no responde", f"{enlace} ({type(e).__name__})", enlace)
+            continue
+        if not destino:
+            rep.agregar("critico", "Sitio web", pagina, producto, "El botón 'Ver en la tienda' no lleva a ninguna tienda",
+                        f"{enlace} respondió HTTP {r.status_code} sin redirigir", enlace)
+            continue
+        estado = revisar_url(destino)
+        if estado["sev"] and estado["sev"] != "menor":
+            rep.agregar(estado["sev"], "Sitio web", pagina, producto, f"'Ver en la tienda': {estado['problema']}", f"Lleva a {destino}", destino)
+            continue
+        dom_destino = dominio_base(destino)
+        if any(dom_destino == d or dom_destino.endswith("." + d) for d in DOMINIOS_NO_TIENDA):
+            rep.agregar("critico", "Sitio web", pagina, producto, "'Ver en la tienda' lleva a un sitio que no es una tienda",
+                        f"Lleva a {destino}", destino)
+            continue
+        if any(dom_destino.endswith(d) for d in DOMINIOS_QUE_BLOQUEAN_ROBOTS):
+            continue  # Instagram/Facebook/WhatsApp: no se puede leer su contenido, se acepta
+        try:
+            texto = normalizar(requests.get(destino, headers={"User-Agent": UA}, timeout=20).text[:300_000])
+            if not any(re.search(r"\b" + p, texto) for p in PALABRAS_MASCOTAS):
+                rep.agregar("advertencia", "Sitio web", pagina, producto, "'Ver en la tienda' lleva a un sitio que no parece de mascotas",
+                            f"Lleva a {destino}: no se encontraron palabras como mascota, perro, gato o accesorio", destino)
+        except requests.exceptions.RequestException:
+            pass  # el estado del destino ya se revisó arriba
+
+
 def revisar_urls(urls, hilos=10) -> dict[str, dict]:
     urls = sorted({u for u in urls if u.startswith("http")})
     with cf.ThreadPoolExecutor(hilos) as ex:
@@ -457,6 +507,8 @@ def demo_animar(pagina, info, url, n_pag, rep: Reporte, cfg, dom):
                     color, et, msg = NARANJO, r["problema"], f"⚠️ {r['problema']}"
                 else:
                     color, et, msg = VERDE, "Funciona", "✅ Sitio externo responde"
+            elif urlparse(absu).path.lower().startswith(tuple(cfg.get("rutas_tienda", ["/api/ir/"]))):
+                color, et, msg = VERDE, "Tienda", "🛒 Botón 'Ver en la tienda' (su destino se revisa al final)"
             else:
                 color, et, msg = VERDE, None, "✅ Enlace interno (se visitará)"
             a.evaluate(JS_MARCAR, [color, et])
@@ -482,6 +534,8 @@ def recorrer_sitio(cfg, rep: Reporte) -> dict:
     pendientes = [sitio + "/"] + [urljoin(sitio + "/", p.lstrip("/")) for p in cfg.get("paginas_extra", [])]
     visitadas, externos, textos, enlaces_tel = set(), defaultdict(set), {}, []
     excluidas = [r.lower() for r in cfg.get("rutas_excluidas", ["/api/"])]
+    rutas_tienda = [r.lower() for r in cfg.get("rutas_tienda", ["/api/ir/"])]
+    tiendas = defaultdict(set)
     sin_destino = set()
 
     with sync_playwright() as p:
@@ -567,6 +621,9 @@ def recorrer_sitio(cfg, rep: Reporte) -> dict:
                     limpio = urldefrag(absu)[0]
                     if dominio_base(limpio) == dom:
                         ruta = urlparse(limpio).path.lower()
+                        if any(ruta.startswith(r) for r in rutas_tienda):
+                            tiendas[limpio].add(url)  # botón "Ver en la tienda": se revisa su destino aparte
+                            continue
                         if any(ruta.startswith(r) for r in excluidas):
                             continue  # ej. /api/ir/…: registraría clics falsos en las métricas
                         if limpio not in visitadas and not re.search(r"\.(pdf|jpg|jpeg|png|webp|svg|zip)$", limpio, re.I):
@@ -583,8 +640,8 @@ def recorrer_sitio(cfg, rep: Reporte) -> dict:
         nav.close()
 
     rep.metricas["enlaces_externos"] = len(externos)
-    print(f"[Sitio] {len(visitadas)} páginas recorridas · {len(externos)} enlaces externos")
-    return {"textos": textos, "externos": externos, "tel": enlaces_tel}
+    print(f"[Sitio] {len(visitadas)} páginas recorridas · {len(externos)} enlaces externos · {len(tiendas)} botones 'Ver en la tienda'")
+    return {"textos": textos, "externos": externos, "tel": enlaces_tel, "tiendas": tiendas}
 
 
 # ----------------------------------------------------------------------------
@@ -805,7 +862,7 @@ def main():
         rep.agregar("critico", "Base de datos", "-", "-", "Faltan las credenciales de Supabase",
                     "Configura SUPABASE_URL y SUPABASE_KEY (ver README)")
 
-    sitio = {"textos": {}, "externos": {}, "tel": []}
+    sitio = {"textos": {}, "externos": {}, "tel": [], "tiendas": {}}
     if cfg.get("revisar_sitio", True):
         try:
             sitio = recorrer_sitio(cfg, rep)
@@ -829,6 +886,9 @@ def main():
             rep.agregar(res["sev"], "Base de datos", tabla, ident, f"{res['problema']} ({col})", res["detalle"], u)
         for pag in sorted(sitio["externos"].get(u, [])):
             rep.agregar(res["sev"], "Sitio web", pag, u, res["problema"], res["detalle"], u)
+
+    if sitio.get("tiendas"):
+        revisar_tiendas(cfg, rep, sitio["tiendas"], datos_bd)
 
     if datos_bd and sitio["textos"]:
         cruzar(cfg, rep, datos_bd, sitio)
