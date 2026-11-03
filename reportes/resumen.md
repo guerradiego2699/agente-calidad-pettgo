@@ -1,4 +1,4 @@
-## Control de calidad PettGo — 01-11-2026 10:37
+## Control de calidad PettGo — 02-11-2026 23:58
 **1 críticos · 2 advertencias · 6 menores** (4 registros, 15 páginas, 2 enlaces externos)
 
 | Gravedad | Origen | Tabla/página | Registro | Problema |
